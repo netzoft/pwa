@@ -1,0 +1,233 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Calendar, Battery, Moon, Sun, Download, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+const BatteryTracker = () => {
+  const [logs, setLogs] = useState(() => {
+    const savedLogs = localStorage.getItem('batteryLogs');
+    return savedLogs ? JSON.parse(savedLogs) : [];
+  });
+
+  const [batteryLevel, setBatteryLevel] = useState('100');
+  const [showChart, setShowChart] = useState(true);
+
+  useEffect(() => {
+    localStorage.setItem('batteryLogs', JSON.stringify(logs));
+  }, [logs]);
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const addLog = (timeOfDay) => {
+    const newLog = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      timeOfDay,
+      batteryLevel: parseInt(batteryLevel)
+    };
+    setLogs([newLog, ...logs]);
+    setBatteryLevel('100');
+  };
+
+  const getBatteryColor = (level) => {
+    if (level > 70) return 'text-green-500';
+    if (level > 30) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const calculateSummary = () => {
+    if (logs.length === 0) return null;
+
+    const last7DaysLogs = logs.filter(log => 
+      new Date(log.date) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    );
+
+    return {
+      totalEntries: logs.length,
+      averageBattery: Math.round(logs.reduce((acc, log) => acc + log.batteryLevel, 0) / logs.length),
+      lastWeekAverage: last7DaysLogs.length ? 
+        Math.round(last7DaysLogs.reduce((acc, log) => acc + log.batteryLevel, 0) / last7DaysLogs.length) : 0,
+      lowestRecorded: Math.min(...logs.map(log => log.batteryLevel)),
+      missingEntries: calculateMissingEntries()
+    };
+  };
+
+  const calculateMissingEntries = () => {
+    if (logs.length < 2) return 0;
+    
+    const today = new Date();
+    const firstLog = new Date(logs[logs.length - 1].date);
+    const expectedEntries = Math.floor((today - firstLog) / (12 * 60 * 60 * 1000)) + 1;
+    return expectedEntries - logs.length;
+  };
+
+  const prepareChartData = () => {
+    return logs
+      .slice(0, 14)
+      .reverse()
+      .map(log => ({
+        name: `${formatDate(log.date)} ${log.timeOfDay}`,
+        battery: log.batteryLevel
+      }));
+  };
+
+  const exportData = () => {
+    const csvContent = [
+      ['Date', 'Time of Day', 'Battery Level'],
+      ...logs.map(log => [
+        formatDate(log.date),
+        log.timeOfDay,
+        log.batteryLevel
+      ])
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `toothbrush-battery-log-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const summary = calculateSummary();
+
+  return (
+    <div className="p-4 max-w-2xl mx-auto space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Battery className="h-6 w-6" />
+              Toothbrush Battery Tracker
+            </div>
+            <Button onClick={exportData} className="flex items-center gap-2">
+              <Download className="h-4 w-4" /> Export
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {/* Input Section */}
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={batteryLevel}
+                onChange={(e) => setBatteryLevel(e.target.value)}
+                className="border rounded p-2 w-20"
+                min="0"
+                max="100"
+              />
+              <span>%</span>
+              <Button
+                onClick={() => addLog('morning')}
+                className="flex items-center gap-2"
+              >
+                <Sun className="h-4 w-4" /> Morning
+              </Button>
+              <Button
+                onClick={() => addLog('evening')}
+                className="flex items-center gap-2"
+              >
+                <Moon className="h-4 w-4" /> Evening
+              </Button>
+            </div>
+
+            {/* Summary Section */}
+            {summary && (
+              <Card className="bg-gray-50">
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-500">Total Entries</div>
+                      <div className="text-lg font-semibold">{summary.totalEntries}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">Average Battery</div>
+                      <div className="text-lg font-semibold">{summary.averageBattery}%</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">7-Day Average</div>
+                      <div className="text-lg font-semibold">{summary.lastWeekAverage}%</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">Lowest Recorded</div>
+                      <div className="text-lg font-semibold">{summary.lowestRecorded}%</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Chart Section */}
+            {logs.length > 0 && (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={prepareChartData()}>
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip />
+                    <Line 
+                      type="monotone" 
+                      dataKey="battery" 
+                      stroke="#2563eb" 
+                      strokeWidth={2}
+                      dot={{ fill: '#2563eb' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Logs Section */}
+            <div className="space-y-2">
+              {logs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between border rounded p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    {log.timeOfDay === 'morning' ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {formatDate(log.date)}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {formatTime(log.date)}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`font-bold ${getBatteryColor(log.batteryLevel)}`}>
+                    {log.batteryLevel}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default BatteryTracker;
