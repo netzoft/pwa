@@ -1,2 +1,2 @@
-# electric toothbrush battery tracker
+# PWA
 My iOS Progressive Web App from Claude
